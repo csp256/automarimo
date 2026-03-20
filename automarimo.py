@@ -312,6 +312,12 @@ def windows_editor_candidates() -> list[list[str]]:
         program_files_x86 / "Cursor" / "Cursor.exe",
         program_files / "VSCodium" / "VSCodium.exe",
         program_files_x86 / "VSCodium" / "VSCodium.exe",
+        program_files / "Notepad++" / "notepad++.exe",
+        program_files_x86 / "Notepad++" / "notepad++.exe",
+        local / "Programs" / "Notepad++" / "notepad++.exe",
+        program_files / "Sublime Text" / "sublime_text.exe",
+        program_files_x86 / "Sublime Text" / "sublime_text.exe",
+        local / "Programs" / "Sublime Text" / "sublime_text.exe",
     ]
 
     jetbrains_common_exes = [
@@ -342,7 +348,7 @@ def windows_editor_candidates() -> list[list[str]]:
             for exe in sorted(root.glob("IntelliJ IDEA*\\bin\\idea64.exe"), reverse=True):
                 append_existing_editor_candidate(candidates, exe)
 
-    for name in ("code", "cursor", "codium", "pycharm64", "pycharm", "idea64", "idea"):
+    for name in ("code", "cursor", "codium", "pycharm64", "pycharm", "idea64", "idea", "notepad++", "subl", "sublime_text"):
         resolved = shutil.which(name)
         if resolved:
             extra = ["--reuse-window"] if name in {"code", "cursor", "codium"} else []
