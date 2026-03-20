@@ -320,6 +320,20 @@ def windows_editor_candidates() -> list[list[str]]:
         local / "Programs" / "Sublime Text" / "sublime_text.exe",
     ]
 
+    visual_studio_exes = []
+    for root in (program_files, program_files_x86):
+        for year in ("2022", "2019", "2017"):
+            for edition in (
+                "Community",
+                "Professional",
+                "Enterprise",
+                "Preview",
+                "BuildTools",
+            ):
+                visual_studio_exes.append(
+                    root / "Microsoft Visual Studio" / year / edition / "Common7" / "IDE" / "devenv.exe"
+                )
+
     jetbrains_common_exes = [
         program_files / "JetBrains" / "PyCharm" / "bin" / "pycharm64.exe",
         program_files_x86 / "JetBrains" / "PyCharm" / "bin" / "pycharm64.exe",
@@ -333,6 +347,9 @@ def windows_editor_candidates() -> list[list[str]]:
         if exe.exists():
             extra = ["--reuse-window"] if exe.name.lower() in {"code.exe", "cursor.exe", "vscodium.exe"} else []
             candidates.append([str(exe), *extra])
+
+    for exe in visual_studio_exes:
+        append_existing_editor_candidate(candidates, exe)
 
     for exe in jetbrains_common_exes:
         append_existing_editor_candidate(candidates, exe)
