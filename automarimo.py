@@ -289,6 +289,12 @@ def normalize_editor_command(cmd: list[str]) -> list[str]:
     return cmd
 
 
+def append_existing_editor_candidate(candidates: list[list[str]], exe: Path, extra: list[str] | None = None) -> None:
+    if exe.exists():
+        if extra is None:
+            extra = []
+        candidates.append([str(exe), *extra])
+
 
 def windows_editor_candidates() -> list[list[str]]:
     local = Path(os.environ.get("LOCALAPPDATA", ""))
@@ -308,12 +314,35 @@ def windows_editor_candidates() -> list[list[str]]:
         program_files_x86 / "VSCodium" / "VSCodium.exe",
     ]
 
+    jetbrains_common_exes = [
+        program_files / "JetBrains" / "PyCharm" / "bin" / "pycharm64.exe",
+        program_files_x86 / "JetBrains" / "PyCharm" / "bin" / "pycharm64.exe",
+        local / "Programs" / "JetBrains" / "PyCharm" / "bin" / "pycharm64.exe",
+        program_files / "JetBrains" / "IntelliJ IDEA" / "bin" / "idea64.exe",
+        program_files_x86 / "JetBrains" / "IntelliJ IDEA" / "bin" / "idea64.exe",
+        local / "Programs" / "JetBrains" / "IntelliJ IDEA" / "bin" / "idea64.exe",
+    ]
+
     for exe in common_exes:
         if exe.exists():
             extra = ["--reuse-window"] if exe.name.lower() in {"code.exe", "cursor.exe", "vscodium.exe"} else []
             candidates.append([str(exe), *extra])
 
-    for name in ("code", "cursor", "codium"):
+    for exe in jetbrains_common_exes:
+        append_existing_editor_candidate(candidates, exe)
+
+    for root in (
+        program_files / "JetBrains",
+        program_files_x86 / "JetBrains",
+        local / "Programs" / "JetBrains",
+    ):
+        if root.exists():
+            for exe in sorted(root.glob("PyCharm*\\bin\\pycharm64.exe"), reverse=True):
+                append_existing_editor_candidate(candidates, exe)
+            for exe in sorted(root.glob("IntelliJ IDEA*\\bin\\idea64.exe"), reverse=True):
+                append_existing_editor_candidate(candidates, exe)
+
+    for name in ("code", "cursor", "codium", "pycharm64", "pycharm", "idea64", "idea"):
         resolved = shutil.which(name)
         if resolved:
             extra = ["--reuse-window"] if name in {"code", "cursor", "codium"} else []
@@ -327,7 +356,6 @@ def windows_editor_candidates() -> list[list[str]]:
             seen.add(key)
             deduped.append(candidate)
     return deduped
-
 
 
 def prompt_for_editor_path_windows() -> list[str] | None:
