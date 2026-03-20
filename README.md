@@ -32,12 +32,11 @@ Finally, you can double click an empty `.py` to get a default marimo notebook.
 # First-run editor picker
 
 The first time you open a normal Python file, automarimo will try to detect common
-editor installs such as VS Code, Cursor, and VSCodium.
+editor installs such as VS Code, Cursor, and VSCodium. It will then allow you to select between:
 
-- If it finds exactly one likely editor, it saves that choice automatically.
-- If it finds multiple candidates, it shows a one-time picker.
-- You can also browse to an editor executable manually.
-- You can choose to use the current Windows default app for ordinary .py files.
+- Any of the automatically detected editors.
+- Browse to an editor executable manually.
+- Use the current Windows default app for ordinary `.py` files.
 
 Your choice is saved into config.json in this same folder.
 

@@ -411,12 +411,6 @@ def ensure_editor_command_windows(cfg: Config) -> list[str]:
                 save_editor_command(cfg, normalized)
             return normalized
         log(f"Configured editor not found: {configured!r}")
-
-    candidates = windows_editor_candidates()
-    if len(candidates) == 1:
-        chosen = normalize_editor_command(candidates[0])
-        save_editor_command(cfg, chosen)
-        return chosen
     
     chosen = normalize_editor_command(prompt_for_editor_windows(cfg))
     return chosen
