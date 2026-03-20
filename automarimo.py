@@ -318,6 +318,11 @@ def windows_editor_candidates() -> list[list[str]]:
         program_files / "Sublime Text" / "sublime_text.exe",
         program_files_x86 / "Sublime Text" / "sublime_text.exe",
         local / "Programs" / "Sublime Text" / "sublime_text.exe",
+        local / "Programs" / "Spyder" / "Spyder.exe",
+        program_files / "Spyder" / "Spyder.exe",
+        program_files_x86 / "Spyder" / "Spyder.exe",
+        local / "spyder-6" / "Spyder.exe",
+        local / "spyder-5" / "Spyder.exe",
     ]
 
     visual_studio_exes = []
@@ -333,6 +338,17 @@ def windows_editor_candidates() -> list[list[str]]:
                 visual_studio_exes.append(
                     root / "Microsoft Visual Studio" / year / edition / "Common7" / "IDE" / "devenv.exe"
                 )
+
+    spyder_exes = [
+        local / "anaconda3" / "Scripts" / "spyder.exe",
+        local / "anaconda3" / "envs" / "base" / "Scripts" / "spyder.exe",
+        local / "miniconda3" / "Scripts" / "spyder.exe",
+        local / "miniconda3" / "envs" / "base" / "Scripts" / "spyder.exe",
+        program_files / "Anaconda3" / "Scripts" / "spyder.exe",
+        program_files_x86 / "Anaconda3" / "Scripts" / "spyder.exe",
+        program_files / "Miniconda3" / "Scripts" / "spyder.exe",
+        program_files_x86 / "Miniconda3" / "Scripts" / "spyder.exe",
+    ]
 
     jetbrains_common_exes = [
         program_files / "JetBrains" / "PyCharm" / "bin" / "pycharm64.exe",
@@ -351,6 +367,9 @@ def windows_editor_candidates() -> list[list[str]]:
     for exe in visual_studio_exes:
         append_existing_editor_candidate(candidates, exe)
 
+    for exe in spyder_exes:
+        append_existing_editor_candidate(candidates, exe)
+
     for exe in jetbrains_common_exes:
         append_existing_editor_candidate(candidates, exe)
 
@@ -365,7 +384,7 @@ def windows_editor_candidates() -> list[list[str]]:
             for exe in sorted(root.glob("IntelliJ IDEA*\\bin\\idea64.exe"), reverse=True):
                 append_existing_editor_candidate(candidates, exe)
 
-    for name in ("code", "cursor", "codium", "pycharm64", "pycharm", "idea64", "idea", "notepad++", "subl", "sublime_text"):
+    for name in ("code", "cursor", "codium", "pycharm64", "pycharm", "idea64", "idea", "notepad++", "subl", "sublime_text", "devenv", "spyder", "spyder.exe"):
         resolved = shutil.which(name)
         if resolved:
             extra = ["--reuse-window"] if name in {"code", "cursor", "codium"} else []
