@@ -831,6 +831,7 @@ def main(argv: list[str]) -> int:
                 auto_install_uv=cfg.auto_install_uv,
                 uv_install_dir=cfg.uv_install_dir,
                 debug=True,
+                seed_empty_py_from_default_notebook=cfg.seed_empty_py_from_default_notebook,
             )
         return run_target(target, cfg, dry_run=dry_run)
     except UserFacingError as exc:
