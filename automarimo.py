@@ -222,20 +222,29 @@ def assigned_marimo_app_names(tree: ast.AST) -> set[str]:
 
 
 
-def has_cell_decorator(tree: ast.AST, app_names: set[str]) -> bool:
+def has_cell_decorator_or_setup_block(tree: ast.AST, app_names: set[str]) -> bool:
     for node in ast.walk(tree):
-        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
-            continue
-
-        for dec in node.decorator_list:
-            target = dec.func if isinstance(dec, ast.Call) else dec
-            if (
-                isinstance(target, ast.Attribute)
-                and target.attr == "cell"
-                and isinstance(target.value, ast.Name)
-                and target.value.id in app_names
-            ):
-                return True
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for dec in node.decorator_list:
+                target = dec.func if isinstance(dec, ast.Call) else dec
+                if (
+                    isinstance(target, ast.Attribute)
+                    and target.attr == "cell"
+                    and isinstance(target.value, ast.Name)
+                    and target.value.id in app_names
+                ):
+                    return True
+                
+        if isinstance(node, ast.With):
+            for item in node.items:
+                ctx = item.context_expr
+                if (
+                    isinstance(ctx, ast.Attribute)
+                    and ctx.attr == "setup"
+                    and isinstance(ctx.value, ast.Name)
+                    and ctx.value.id in app_names
+                ):
+                    return True
     return False
 
 
@@ -259,7 +268,7 @@ def is_probably_marimo_notebook(path: Path) -> bool:
     if not app_names:
         return False
 
-    return has_cell_decorator(tree, app_names)
+    return has_cell_decorator_or_setup_block(tree, app_names)
 
 
 
