@@ -25,7 +25,8 @@ DEFAULT_CONFIG = {
     ],
     "auto_install_uv": True,
     "uv_install_dir": ".\\vendor\\uv",
-    "debug": False
+    "debug": False,
+    "seed_empty_py_from_default_notebook": True,
 }
 
 
@@ -36,6 +37,7 @@ class Config:
     auto_install_uv: bool
     uv_install_dir: Path
     debug: bool
+    seed_empty_py_from_default_notebook: bool
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -104,6 +106,10 @@ def load_config() -> Config:
     auto_install_uv = raw.get("auto_install_uv", DEFAULT_CONFIG["auto_install_uv"])
     uv_install_dir_raw = raw.get("uv_install_dir", DEFAULT_CONFIG["uv_install_dir"])
     debug = raw.get("debug", DEFAULT_CONFIG["debug"])
+    seed_empty_py_from_default_notebook = raw.get(
+        "seed_empty_py_from_default_notebook",
+        DEFAULT_CONFIG["seed_empty_py_from_default_notebook"]
+    )
 
     if editor_command is not None:
         if not isinstance(editor_command, list) or not all(isinstance(x, str) for x in editor_command) or not editor_command:
@@ -116,6 +122,8 @@ def load_config() -> Config:
         raise UserFacingError("config.json: uv_install_dir must be a non-empty string")
     if not isinstance(debug, bool):
         raise UserFacingError("config.json: debug must be true or false")
+    if not isinstance(seed_empty_file_from_default_notebook, bool):
+        raise UserFacingError("config.json: seed_empty_py_from_default_notebook must be true or false")
 
     uv_install_dir = expand_local_path(uv_install_dir_raw)
     return Config(
@@ -124,6 +132,7 @@ def load_config() -> Config:
         auto_install_uv=auto_install_uv,
         uv_install_dir=uv_install_dir,
         debug=debug,
+        seed_empty_py_from_default_notebook=seed_empty_py_from_default_notebook,
     )
 
 
@@ -729,6 +738,9 @@ def seed_empty_file_from_default_notebook(path: Path, cfg: Config) -> bool:
     If path is an empty .py file, copy the contents of default_notebook.py into it.
     Returns True if the file was modified.
     """
+    if not cfg.seed_empty_py_from_default_notebook:
+        return False
+
     if path.suffix.lower() != ".py":
         return False
 
