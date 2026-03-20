@@ -1,0 +1,15 @@
+{
+  "editor_command": null,
+  "marimo_args": [
+    "run",
+    "--with",
+    "marimo",
+    "marimo",
+    "edit",
+    "--sandbox",
+    "--watch"
+  ],
+  "auto_install_uv": true,
+  "uv_install_dir": ".\\vendor\\uv",
+  "debug": false
+}
