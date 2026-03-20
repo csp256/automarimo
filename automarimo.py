@@ -26,7 +26,8 @@ DEFAULT_CONFIG = {
     "auto_install_uv": True,
     "uv_install_dir": ".\\vendor\\uv",
     "debug": False,
-    "seed_empty_py_from_default_notebook": True,
+    "seed_empty_py_from_template": True,
+    "empty_py_template": "default_notebook.py",
     "converted_ipynb_filename_template": "{stem}_marimo.py"
 }
 
@@ -38,7 +39,8 @@ class Config:
     auto_install_uv: bool
     uv_install_dir: Path
     debug: bool
-    seed_empty_py_from_default_notebook: bool
+    seed_empty_py_from_template: bool
+    empty_py_template: str
     converted_ipynb_filename_template: str
 
 
@@ -111,9 +113,13 @@ def load_config() -> Config:
     auto_install_uv = raw.get("auto_install_uv", DEFAULT_CONFIG["auto_install_uv"])
     uv_install_dir_raw = raw.get("uv_install_dir", DEFAULT_CONFIG["uv_install_dir"])
     debug = raw.get("debug", DEFAULT_CONFIG["debug"])
-    seed_empty_py_from_default_notebook = raw.get(
-        "seed_empty_py_from_default_notebook",
-        DEFAULT_CONFIG["seed_empty_py_from_default_notebook"]
+    seed_empty_py_from_template = raw.get(
+        "seed_empty_py_from_template",
+        DEFAULT_CONFIG["seed_empty_py_from_template"]
+    )
+    empty_py_template = raw.get(
+        "empty_py_template",
+        DEFAULT_CONFIG["empty_py_template"]
     )
     converted_ipynb_filename_template = raw.get(
         "converted_ipynb_filename_template",
@@ -131,8 +137,10 @@ def load_config() -> Config:
         raise UserFacingError("config.json: uv_install_dir must be a non-empty string")
     if not isinstance(debug, bool):
         raise UserFacingError("config.json: debug must be true or false")
-    if not isinstance(seed_empty_py_from_default_notebook, bool):
-        raise UserFacingError("config.json: seed_empty_py_from_default_notebook must be true or false")
+    if not isinstance(seed_empty_py_from_template, bool):
+        raise UserFacingError("config.json: seed_empty_py_from_template must be true or false")
+    if not isinstance(empty_py_template, str):
+        raise UserFacingError("config.json: empty_py_template must be a string")
     if not isinstance(converted_ipynb_filename_template, str) or not converted_ipynb_filename_template:
         raise UserFacingError("config.json: converted_ipynb_filename_template must be a non-empty string")
 
@@ -143,7 +151,8 @@ def load_config() -> Config:
         auto_install_uv=auto_install_uv,
         uv_install_dir=uv_install_dir,
         debug=debug,
-        seed_empty_py_from_default_notebook=seed_empty_py_from_default_notebook,
+        seed_empty_py_from_template=seed_empty_py_from_template,
+        empty_py_template=empty_py_template,
         converted_ipynb_filename_template=converted_ipynb_filename_template,
     )
 
@@ -785,12 +794,29 @@ def convert_ipynb_to_marimo(path: Path, cfg: Config) -> Path:
     return output_path
 
 
-def seed_empty_file_from_default_notebook(path: Path, cfg: Config) -> bool:
+def resolve_empty_py_template_path(cfg: Config) -> Path:
+    template = Path(cfg.empty_py_template)
+
+    if template.is_absolute():
+        resolved = template
+    else:
+        resolved = SCRIPT_DIR / template
+
+    resolved = resolved.resolve()
+
+    if resolved.name != template.name and not Path(cfg.empty_py_template).is_absolute():
+        # This allows subdirectories under SCRIPT_DIR, but avoids odd surprises in error messages.
+        pass
+
+    return resolved
+
+
+def seed_empty_file_from_template(path: Path, cfg: Config) -> bool:
     """
-    If path is an empty .py file, copy the contents of default_notebook.py into it.
+    If path is an empty .py file, copy the configured template into it.
     Returns True if the file was modified.
     """
-    if not cfg.seed_empty_py_from_default_notebook:
+    if not cfg.seed_empty_py_from_template:
         return False
 
     if path.suffix.lower() != ".py":
@@ -802,15 +828,16 @@ def seed_empty_file_from_default_notebook(path: Path, cfg: Config) -> bool:
     except FileNotFoundError:
         return False
 
-    default_notebook = SCRIPT_DIR / "default_notebook.py"
-    if not default_notebook.exists() or not default_notebook.is_file():
+    template_path = resolve_empty_py_template_path(cfg)
+    if not template_path.exists() or not template_path.is_file():
         raise UserFacingError(
-            f"Opened an empty Python file, but the default notebook template was not found: {default_notebook}"
+            "Opened an empty Python file, but the configured empty-file template was not found:\n"
+            f"  {template_path}"
         )
 
-    contents = default_notebook.read_text(encoding="utf-8")
+    contents = template_path.read_text(encoding="utf-8")
     path.write_text(contents, encoding="utf-8")
-    maybe_debug(cfg, f"Seeded empty Python file from default notebook: {path}")
+    maybe_debug(cfg, f"Seeded empty Python file from template: {template_path} -> {path}")
     return True
 
 def run_target(path: Path, cfg: Config, *, dry_run: bool = False) -> int:
@@ -826,7 +853,7 @@ def run_target(path: Path, cfg: Config, *, dry_run: bool = False) -> int:
         validate_ipynb_structure(path)
         path = convert_ipynb_to_marimo(path, cfg)
     
-    seeded_from_template = seed_empty_file_from_default_notebook(path, cfg)
+    seeded_from_template = seed_empty_file_from_template(path, cfg)
     is_marimo = is_probably_marimo_notebook(path)
     maybe_debug(cfg, f"Target: {path}")
     maybe_debug(cfg, f"Seeded from default notebook: {seeded_from_template}")
@@ -883,7 +910,8 @@ def main(argv: list[str]) -> int:
                 auto_install_uv=cfg.auto_install_uv,
                 uv_install_dir=cfg.uv_install_dir,
                 debug=True,
-                seed_empty_py_from_default_notebook=cfg.seed_empty_py_from_default_notebook,
+                seed_empty_py_from_template=cfg.seed_empty_py_from_template,
+                empty_py_template=cfg.empty_py_template,
                 converted_ipynb_filename_template=cfg.converted_ipynb_filename_template,
             )
         return run_target(target, cfg, dry_run=dry_run)
