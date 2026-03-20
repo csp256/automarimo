@@ -51,30 +51,11 @@ That avoids misclassifying ordinary Python files that merely mention marimo. -->
 
 ## Configuration
 
-Edit config.json in this same folder if you want to change the editor later.
+You may edit `config.json` in this same folder. This can allow you to change the editor later, or alter other behaviors.
 
-Typical Windows VS Code configuration:
+Note, the `converted_ipynb_filename_template` field must include `{stem}`, and must produce a `.py` filename.
 
-```
-{
-  "editor_command": [
-    "C:\\Users\\YOURNAME\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe",
-    "--reuse-window"
-  ],
-  "marimo_args": [
-    "run",
-    "--with",
-    "marimo",
-    "marimo",
-    "edit",
-    "--sandbox",
-    "--watch"
-  ],
-  "auto_install_uv": true,
-  "uv_install_dir": ".\\vendor\\uv",
-  "debug": false
-}
-```
+If you delete `config.json` then it will be recreated from defaults the next time automarimo runs.
 
 ## Automatic `uv` Installation
 

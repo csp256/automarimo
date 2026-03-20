@@ -27,6 +27,7 @@ DEFAULT_CONFIG = {
     "uv_install_dir": ".\\vendor\\uv",
     "debug": False,
     "seed_empty_py_from_default_notebook": True,
+    "converted_ipynb_filename_template": "{stem}_marimo.py"
 }
 
 
@@ -38,6 +39,7 @@ class Config:
     uv_install_dir: Path
     debug: bool
     seed_empty_py_from_default_notebook: bool
+    converted_ipynb_filename_template: str
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -60,6 +62,9 @@ class UvInstallError(AutomarimoError):
 class UserFacingError(AutomarimoError):
     pass
 
+
+class HoldWindowOpenError(UserFacingError):
+    pass
 
 
 def eprint(*args: object) -> None:
@@ -110,6 +115,10 @@ def load_config() -> Config:
         "seed_empty_py_from_default_notebook",
         DEFAULT_CONFIG["seed_empty_py_from_default_notebook"]
     )
+    converted_ipynb_filename_template = raw.get(
+        "converted_ipynb_filename_template",
+        DEFAULT_CONFIG["converted_ipynb_filename_template"]
+    )
 
     if editor_command is not None:
         if not isinstance(editor_command, list) or not all(isinstance(x, str) for x in editor_command) or not editor_command:
@@ -122,8 +131,10 @@ def load_config() -> Config:
         raise UserFacingError("config.json: uv_install_dir must be a non-empty string")
     if not isinstance(debug, bool):
         raise UserFacingError("config.json: debug must be true or false")
-    if not isinstance(seed_empty_file_from_default_notebook, bool):
+    if not isinstance(seed_empty_py_from_default_notebook, bool):
         raise UserFacingError("config.json: seed_empty_py_from_default_notebook must be true or false")
+    if not isinstance(converted_ipynb_filename_template, str) or not converted_ipynb_filename_template:
+        raise UserFacingError("config.json: converted_ipynb_filename_template must be a non-empty string")
 
     uv_install_dir = expand_local_path(uv_install_dir_raw)
     return Config(
@@ -133,6 +144,7 @@ def load_config() -> Config:
         uv_install_dir=uv_install_dir,
         debug=debug,
         seed_empty_py_from_default_notebook=seed_empty_py_from_default_notebook,
+        converted_ipynb_filename_template=converted_ipynb_filename_template,
     )
 
 
@@ -153,9 +165,36 @@ def expand_local_path(value: str) -> Path:
     return p.resolve()
 
 
-def converted_marimo_path_for_ipynb(path: Path) -> Path:
-    stem = path.with_suffix("").name
-    return path.with_name(f"{stem}_marimo.py")
+def converted_marimo_path_for_ipynb(path: Path, cfg: Config) -> Path:
+    stem = path.stem
+
+    try:
+        filename = cfg.converted_ipynb_filename_template.format(stem=stem)
+    except KeyError as exc:
+        raise UserFacingError(
+            "config.json: converted_ipynb_filename_template may only use known fields such as {stem}"
+        ) from exc
+    except Exception as exc:
+        raise UserFacingError(
+            f"config.json: invalid converted_ipynb_filename_template: {exc}"
+        ) from exc
+
+    if not filename or filename in {".", ".."}:
+        raise UserFacingError(
+            "config.json: converted_ipynb_filename_template produced an invalid filename"
+        )
+
+    if Path(filename).name != filename:
+        raise UserFacingError(
+            "config.json: converted_ipynb_filename_template must produce a filename only, not a path"
+        )
+
+    if not filename.lower().endswith(".py"):
+        raise UserFacingError(
+            "config.json: converted_ipynb_filename_template must produce a filename ending in .py"
+        )
+
+    return path.with_name(filename)
 
 
 def maybe_debug(cfg: Config, message: str) -> None:
@@ -698,7 +737,20 @@ def convert_ipynb_to_marimo(path: Path, cfg: Config) -> Path:
     if path.suffix.lower() != ".ipynb":
         return path
 
-    output_path = converted_marimo_path_for_ipynb(path)
+    output_path = converted_marimo_path_for_ipynb(path, cfg)
+
+    if output_path.exists():
+        raise HoldWindowOpenError(
+            "Jupyter notebook conversion was not performed because the target Python file already exists.\n"
+            f"  input notebook: {path}\n"
+            f"  target file:    {output_path}\n"
+            "\n"
+            "To continue, either:\n"
+            f"  1. Open the existing Python file directly:\n"
+            f"     {output_path}\n"
+            "  2. Or rename/remove the existing target file, then open the .ipynb file again.\n"
+        )
+
     cmd = build_marimo_convert_command(path, output_path, cfg)
     maybe_debug(cfg, f"Converting Jupyter notebook with command: {cmd!r}")
 
@@ -832,8 +884,15 @@ def main(argv: list[str]) -> int:
                 uv_install_dir=cfg.uv_install_dir,
                 debug=True,
                 seed_empty_py_from_default_notebook=cfg.seed_empty_py_from_default_notebook,
+                converted_ipynb_filename_template=cfg.converted_ipynb_filename_template,
             )
         return run_target(target, cfg, dry_run=dry_run)
+    except HoldWindowOpenError as exc:
+        log(f"ERROR: {exc}")
+        eprint(f"Error: {exc}")
+        if os.name == "nt":
+            input("\nPress Enter to close this window...")
+        return 1
     except UserFacingError as exc:
         log(f"ERROR: {exc}")
         eprint(f"Error: {exc}")
