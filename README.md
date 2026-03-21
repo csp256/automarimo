@@ -7,7 +7,7 @@ It is also capable of automatically converting `.ipynb` Jupyter nobteooks to mar
 
 Finally, you can double click an empty `.py` to get a default marimo notebook.
 
-# Installation (Windows)
+## Installation (Windows)
 
 1. Move this folder somewhere stable. Do NOT leave it in Downloads.
    Good example:
@@ -29,6 +29,23 @@ Finally, you can double click an empty `.py` to get a default marimo notebook.
 
 7. Do not move or rename this directory.
 
+## Installation (macOS)
+
+1. Download `automarimo.app` somewhere stable, such as your repo root or your `Applications` folder.
+2. Double-click `automarimo.app` once to make sure macOS will launch it.
+3. If macOS warns that the app was downloaded from the internet, allow it in **System Settings → Privacy & Security**.
+4. In Finder, select any `.py` file.
+5. Press **Command-I** to open **Get Info**.
+6. Expand **Open with**.
+7. Choose **automarimo.app** from the app list.
+8. Click **Change All...**.
+
+Repeat steps 5 through 8 with any `.ipynb` file.
+
+- On Mac, automarimo stores its user config under `~/.config/automarimo/`.
+- If `~/.config/` is owned by `root` instead of your user, Automarimo may fail to create its config directory. Fix the ownership before using it: `sudo chown -R "$USER":staff ~/.config`
+- If you move `automarimo.app` after setting it as the default opener, you may need to repeat the **Open with → Change All...** step.
+
 # First-run editor picker
 
 The first time you open a normal Python file, automarimo will try to detect common
@@ -37,8 +54,6 @@ editor installs such as VS Code, Cursor, and VSCodium. It will then allow you to
 - Any of the automatically detected editors.
 - Browse to an editor executable manually.
 - Use the current Windows default app for ordinary `.py` files.
-
-Your choice is saved into config.json in this same folder.
 
 <!-- How it decides whether a file is a marimo notebook
 --------------------------------------------------

@@ -1,5 +1,6 @@
 __marimo__
 vendor
+.DS_Store
 
 automarimo.log
 automarimo.old.log
