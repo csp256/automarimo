@@ -14,5 +14,6 @@
   "debug": false,
   "seed_empty_py_from_template": true,
   "empty_py_template": "default_notebook.py",
-  "converted_ipynb_filename_template": "{stem}_marimo.py"
+  "converted_ipynb_filename_template": "{stem}_marimo.py",
+  "max_log_kilobytes": 256
 }

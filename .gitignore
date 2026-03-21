@@ -2,6 +2,7 @@ __marimo__
 vendor
 
 automarimo.log
+automarimo.old.log
 
 diff
 empty.py

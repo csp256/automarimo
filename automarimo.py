@@ -28,7 +28,8 @@ DEFAULT_CONFIG = {
     "debug": False,
     "seed_empty_py_from_template": True,
     "empty_py_template": "default_notebook.py",
-    "converted_ipynb_filename_template": "{stem}_marimo.py"
+    "converted_ipynb_filename_template": "{stem}_marimo.py",
+    "max_log_kilobytes": 256,
 }
 
 
@@ -42,12 +43,49 @@ class Config:
     seed_empty_py_from_template: bool
     empty_py_template: str
     converted_ipynb_filename_template: str
+    max_log_kilobytes: int
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 CONFIG_PATH = SCRIPT_DIR / "config.json"
 LOG_PATH = SCRIPT_DIR / "automarimo.log"
+LOG_OLD_PATH = SCRIPT_DIR / "automarimo.old.log"
+_LOG_INITIALIZED = False
+_LOG_CURRENT_SIZE = 0
+_LOG_MAX_BYTES = DEFAULT_CONFIG["max_log_kilobytes"] * 1024
 
+def configure_logging(cfg: Config) -> None:
+    global _LOG_INITIALIZED, _LOG_CURRENT_SIZE, _LOG_MAX_BYTES
+
+    _LOG_MAX_BYTES = cfg.max_log_kilobytes * 1024
+
+    try:
+        _LOG_CURRENT_SIZE = LOG_PATH.stat().st_size
+    except FileNotFoundError:
+        _LOG_CURRENT_SIZE = 0
+
+    _LOG_INITIALIZED = True
+
+
+def rotate_log_if_needed(next_write_size: int) -> None:
+    global _LOG_CURRENT_SIZE
+
+    if _LOG_MAX_BYTES <= 0:
+        return
+
+    if _LOG_CURRENT_SIZE + next_write_size <= _LOG_MAX_BYTES:
+        return
+
+    try:
+        if LOG_OLD_PATH.exists():
+            LOG_OLD_PATH.unlink()
+    except FileNotFoundError:
+        pass
+
+    if LOG_PATH.exists():
+        LOG_PATH.replace(LOG_OLD_PATH)
+
+    _LOG_CURRENT_SIZE = 0
 
 class AutomarimoError(Exception):
     pass
@@ -75,9 +113,25 @@ def eprint(*args: object) -> None:
 
 
 def log(message: str) -> None:
+    global _LOG_INITIALIZED, _LOG_CURRENT_SIZE
+
+    if not _LOG_INITIALIZED:
+        try:
+            _LOG_CURRENT_SIZE = LOG_PATH.stat().st_size
+        except FileNotFoundError:
+            _LOG_CURRENT_SIZE = 0
+        _LOG_INITIALIZED = True
+
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with LOG_PATH.open("a", encoding="utf-8") as f:
-        f.write(f"[{timestamp}] {message}\n")
+    line = f"[{timestamp}] {message}\n"
+    encoded = line.encode("utf-8")
+
+    rotate_log_if_needed(len(encoded))
+
+    with LOG_PATH.open("ab") as f:
+        f.write(encoded)
+
+    _LOG_CURRENT_SIZE += len(encoded)
 
 
 
@@ -125,6 +179,7 @@ def load_config() -> Config:
         "converted_ipynb_filename_template",
         DEFAULT_CONFIG["converted_ipynb_filename_template"]
     )
+    max_log_kilobytes = raw.get("max_log_kilobytes", DEFAULT_CONFIG["max_log_kilobytes"])
 
     if editor_command is not None:
         if not isinstance(editor_command, list) or not all(isinstance(x, str) for x in editor_command) or not editor_command:
@@ -139,10 +194,12 @@ def load_config() -> Config:
         raise UserFacingError("config.json: debug must be true or false")
     if not isinstance(seed_empty_py_from_template, bool):
         raise UserFacingError("config.json: seed_empty_py_from_template must be true or false")
-    if not isinstance(empty_py_template, str):
-        raise UserFacingError("config.json: empty_py_template must be a string")
+    if not isinstance(empty_py_template, str) or not empty_py_template:
+        raise UserFacingError("config.json: empty_py_template must be a non-empty string")
     if not isinstance(converted_ipynb_filename_template, str) or not converted_ipynb_filename_template:
         raise UserFacingError("config.json: converted_ipynb_filename_template must be a non-empty string")
+    if not isinstance(max_log_kilobytes, int) or max_log_kilobytes < 0:
+        raise UserFacingError("config.json: max_log_kilobytes must be a non-negative integer")
 
     uv_install_dir = expand_local_path(uv_install_dir_raw)
     return Config(
@@ -154,6 +211,7 @@ def load_config() -> Config:
         seed_empty_py_from_template=seed_empty_py_from_template,
         empty_py_template=empty_py_template,
         converted_ipynb_filename_template=converted_ipynb_filename_template,
+        max_log_kilobytes=max_log_kilobytes,
     )
 
 
@@ -802,13 +860,7 @@ def resolve_empty_py_template_path(cfg: Config) -> Path:
     else:
         resolved = SCRIPT_DIR / template
 
-    resolved = resolved.resolve()
-
-    if resolved.name != template.name and not Path(cfg.empty_py_template).is_absolute():
-        # This allows subdirectories under SCRIPT_DIR, but avoids odd surprises in error messages.
-        pass
-
-    return resolved
+    return resolved.resolve()
 
 
 def seed_empty_file_from_template(path: Path, cfg: Config) -> bool:
@@ -856,7 +908,7 @@ def run_target(path: Path, cfg: Config, *, dry_run: bool = False) -> int:
     seeded_from_template = seed_empty_file_from_template(path, cfg)
     is_marimo = is_probably_marimo_notebook(path)
     maybe_debug(cfg, f"Target: {path}")
-    maybe_debug(cfg, f"Seeded from default notebook: {seeded_from_template}")
+    maybe_debug(cfg, f"Seeded empty .py from template notebook: {seeded_from_template}")
     maybe_debug(cfg, f"Detected marimo notebook: {is_marimo}")
 
     if is_marimo:
@@ -890,7 +942,6 @@ def run_target(path: Path, cfg: Config, *, dry_run: bool = False) -> int:
 
 def main(argv: list[str]) -> int:
     try:
-        log(f"PID={os.getpid()} argv={sys.argv!r}")
         target, dry_run, force_debug, print_config_path, print_log_path = parse_args(argv)
         if print_config_path:
             print(CONFIG_PATH)
@@ -913,7 +964,10 @@ def main(argv: list[str]) -> int:
                 seed_empty_py_from_template=cfg.seed_empty_py_from_template,
                 empty_py_template=cfg.empty_py_template,
                 converted_ipynb_filename_template=cfg.converted_ipynb_filename_template,
+                max_log_kilobytes=cfg.max_log_kilobytes,
             )
+        configure_logging(cfg)
+        log(f"PID={os.getpid()} argv={sys.argv!r}")
         return run_target(target, cfg, dry_run=dry_run)
     except HoldWindowOpenError as exc:
         log(f"ERROR: {exc}")
