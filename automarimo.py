@@ -11,6 +11,20 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Sequence
 
+def is_windows() -> bool:
+    return sys.platform.startswith("win")
+
+
+def is_macos() -> bool:
+    return sys.platform == "darwin"
+
+
+def default_uv_install_dir() -> str:
+    if is_windows():
+        return ".\\vendor\\uv"
+    return "./vendor/uv"
+
+
 APP_NAME = "automarimo"
 DEFAULT_CONFIG = {
     "editor_command": None,
@@ -24,7 +38,7 @@ DEFAULT_CONFIG = {
         "--watch"
     ],
     "auto_install_uv": True,
-    "uv_install_dir": ".\\vendor\\uv",
+    "uv_install_dir": default_uv_install_dir(),
     "debug": False,
     "seed_empty_py_from_template": True,
     "empty_py_template": "default_notebook.py",
@@ -44,6 +58,10 @@ class Config:
     empty_py_template: str
     converted_ipynb_filename_template: str
     max_log_kilobytes: int
+
+
+def should_hold_console_open() -> bool:
+    return True
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -411,7 +429,11 @@ def append_existing_editor_candidate(candidates: list[list[str]], exe: Path, ext
         candidates.append([str(exe), *extra])
 
 
-def windows_editor_candidates() -> list[list[str]]:
+def editor_candidates_macos() -> list[list[str]]:
+    return []
+
+
+def editor_candidates_windows() -> list[list[str]]:
     local = Path(os.environ.get("LOCALAPPDATA", ""))
     program_files = Path(os.environ.get("ProgramFiles", ""))
     program_files_x86 = Path(os.environ.get("ProgramFiles(x86)", ""))
@@ -515,6 +537,34 @@ def windows_editor_candidates() -> list[list[str]]:
     return deduped
 
 
+def editor_candidates() -> list[list[str]]:
+    if is_windows():
+        return editor_candidates_windows()
+    if is_macos():
+        return editor_candidates_macos()
+    return []
+
+
+def prompt_for_editor_path_macos() -> list[str] | None:
+    raise UserFacingError("Not yet")
+
+
+def prompt_for_editor_macos(cfg: Config) -> list[str]:
+    raise UserFacingError("Editor picking is not implemented on macOS yet.")
+
+
+def ensure_editor_command_macos(cfg: Config) -> list[str]:
+    configured = cfg.editor_command
+    if configured:
+        base = normalize_editor_command(configured)
+        exe = base[0]
+        if Path(exe).exists() or shutil.which(exe):
+            return base
+    raise EditorNotFoundError(
+        "Could not find the configured editor executable. macOS editor setup is not implemented yet."
+    )
+
+
 def prompt_for_editor_path_windows() -> list[str] | None:
     try:
         import tkinter as tk
@@ -541,7 +591,7 @@ def prompt_for_editor_path_windows() -> list[str] | None:
 
 def prompt_for_editor_windows(cfg: Config) -> list[str]:
     log("showing editor picker")
-    candidates = windows_editor_candidates()
+    candidates = editor_candidates_windows()
 
     print("\nautomarimo setup")
     print("=================")
@@ -584,9 +634,9 @@ def prompt_for_editor_windows(cfg: Config) -> list[str]:
             return command
 
         if selected == default_index:
-            save_editor_command(cfg, ["__WINDOWS_DEFAULT__"])
-            print("Saved: use Windows default app for ordinary Python files.")
-            return ["__WINDOWS_DEFAULT__"]
+            save_editor_command(cfg, ["__DEFAULT_APP__"])
+            print("Saved: use default app for ordinary Python files.")
+            return ["__DEFAULT_APP__"]
 
         print("Selection out of range.")
 
@@ -594,7 +644,7 @@ def prompt_for_editor_windows(cfg: Config) -> list[str]:
 def ensure_editor_command_windows(cfg: Config) -> list[str]:
     configured = cfg.editor_command
 
-    if configured == ["__WINDOWS_DEFAULT__"]:
+    if configured == ["__DEFAULT_APP__"]:
         return configured
 
     if configured and not command_looks_like_placeholder(configured):
@@ -610,40 +660,51 @@ def ensure_editor_command_windows(cfg: Config) -> list[str]:
     return chosen
 
 
-def build_editor_command(path: Path, cfg: Config) -> list[str] | None:
-    if os.name == "nt":
-        base = ensure_editor_command_windows(cfg)
-        if base == ["__WINDOWS_DEFAULT__"]:
-            return None
-        return [*base, str(path)]
-
+def ensure_editor_command(cfg: Config) -> list[str] | None:
+    if is_windows():
+        return ensure_editor_command_windows(cfg)
+    if is_macos():
+        return ensure_editor_command_macos(cfg)
     if cfg.editor_command:
         base = normalize_editor_command(cfg.editor_command)
         exe = base[0]
         if Path(exe).exists() or shutil.which(exe):
-            return [*base, str(path)]
-
+            return base
     raise EditorNotFoundError(
         "Could not find the configured editor executable. Update config.json."
     )
+
+
+def build_editor_command(path: Path, cfg: Config) -> list[str] | None:
+    base = ensure_editor_command(cfg)
+    if base == ["__DEFAULT_APP__"]:
+        return None
+    return [*base, str(path)]
 
 
 
 def launch_editor(path: Path, cfg: Config, cmd: list[str] | None) -> int:
     # cmd = build_editor_command(path, cfg)
     if cmd is None:
-        return launch_with_windows_default(path, cfg)
+        return launch_with_default_app(path, cfg)
     maybe_debug(cfg, f"Launching editor: {cmd!r}")
     subprocess.Popen(cmd)
     return 0
 
 
 
-def launch_with_windows_default(path: Path, cfg: Config) -> int:
-    maybe_debug(cfg, f"Falling back to Windows default opener for: {path}")
-    os.startfile(str(path))
-    return 0
+def launch_with_default_app(path: Path, cfg: Config) -> int:
+    if is_windows():
+        maybe_debug(cfg, f"Falling back to Windows default opener for: {path}")
+        os.startfile(str(path))
+        return 0
 
+    if is_macos():
+        maybe_debug(cfg, f"Falling back to macOS default opener for: {path}")
+        subprocess.Popen(["open", str(path)])
+        return 0
+
+    raise UserFacingError("Default app launching is not implemented on this platform yet.")
 
 
 def locate_uv_candidates(install_dir: Path) -> list[Path]:
@@ -667,6 +728,9 @@ def resolve_uv_executable(cfg: Config) -> str | None:
 
     return None
 
+
+def install_uv_macos(install_dir: Path, debug: bool = False) -> None:
+    raise UvInstallError("Not yet")
 
 
 def install_uv_windows(install_dir: Path, debug: bool = False) -> None:
@@ -694,6 +758,15 @@ def install_uv_windows(install_dir: Path, debug: bool = False) -> None:
         )
 
 
+def install_uv_platform(install_dir: Path, debug: bool = False) -> None:
+    if is_windows():
+        install_uv_windows(install_dir, debug=debug)
+        return
+    if is_macos():
+        install_uv_macos(install_dir, debug=debug)
+        return
+    raise UvInstallError("Not yet")
+
 
 def ensure_uv(cfg: Config) -> str:
     uv_exe = resolve_uv_executable(cfg)
@@ -706,12 +779,8 @@ def ensure_uv(cfg: Config) -> str:
             "uv was not found and auto_install_uv is false. Install uv manually or enable auto_install_uv in config.json."
         )
 
-    if os.name != "nt":
-        raise UvInstallError(
-            "uv was not found. This portable build only auto-installs uv on Windows at the moment."
-        )
+    install_uv_platform(cfg.uv_install_dir, debug=cfg.debug)
 
-    install_uv_windows(cfg.uv_install_dir, debug=cfg.debug)
     uv_exe = resolve_uv_executable(cfg)
     if not uv_exe:
         raise UvInstallError("uv installation finished, but automarimo still could not find uv.")
@@ -918,7 +987,7 @@ def run_target(path: Path, cfg: Config, *, dry_run: bool = False) -> int:
             print(json.dumps(cmd))
             return 0
         rc = run_foreground(cmd, banner=marimo_banner(path))
-        if rc != 0 and os.name == "nt":
+        if rc != 0 and should_hold_console_open(): 
             input("\nmarimo exited with an error. Press Enter to close this window...")
         return rc
 
@@ -934,8 +1003,8 @@ def run_target(path: Path, cfg: Config, *, dry_run: bool = False) -> int:
         raise
     except FileNotFoundError as exc:
         log(f"Editor launch FileNotFoundError: {exc}")
-        if os.name == "nt":
-            return launch_with_windows_default(path, cfg)
+        if is_windows() or is_macos():
+            return launch_with_default_app(path, cfg)
         raise EditorNotFoundError(str(exc)) from exc
 
 
@@ -972,7 +1041,7 @@ def main(argv: list[str]) -> int:
     except HoldWindowOpenError as exc:
         log(f"ERROR: {exc}")
         eprint(f"Error: {exc}")
-        if os.name == "nt":
+        if should_hold_console_open():
             input("\nPress Enter to close this window...")
         return 1
     except UserFacingError as exc:
