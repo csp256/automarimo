@@ -430,7 +430,44 @@ def append_existing_editor_candidate(candidates: list[list[str]], exe: Path, ext
 
 
 def editor_candidates_macos() -> list[list[str]]:
-    return []
+    home = Path.home()
+
+    app_candidates: list[tuple[Path, list[str]]] = [
+        (Path("/Applications/Visual Studio Code.app"), ["open", "-a", "/Applications/Visual Studio Code.app"]),
+        (home / "Applications" / "Visual Studio Code.app", ["open", "-a", str(home / "Applications" / "Visual Studio Code.app")]),
+        (Path("/Applications/Cursor.app"), ["open", "-a", "/Applications/Cursor.app"]),
+        (home / "Applications" / "Cursor.app", ["open", "-a", str(home / "Applications" / "Cursor.app")]),
+        (Path("/Applications/VSCodium.app"), ["open", "-a", "/Applications/VSCodium.app"]),
+        (home / "Applications" / "VSCodium.app", ["open", "-a", str(home / "Applications" / "VSCodium.app")]),
+        (Path("/Applications/PyCharm.app"), ["open", "-a", "/Applications/PyCharm.app"]),
+        (home / "Applications" / "PyCharm.app", ["open", "-a", str(home / "Applications" / "PyCharm.app")]),
+        (Path("/Applications/IntelliJ IDEA.app"), ["open", "-a", "/Applications/IntelliJ IDEA.app"]),
+        (home / "Applications" / "IntelliJ IDEA.app", ["open", "-a", str(home / "Applications" / "IntelliJ IDEA.app")]),
+        (Path("/Applications/Sublime Text.app"), ["open", "-a", "/Applications/Sublime Text.app"]),
+        (home / "Applications" / "Sublime Text.app", ["open", "-a", str(home / "Applications" / "Sublime Text.app")]),
+        (Path("/Applications/Spyder.app"), ["open", "-a", "/Applications/Spyder.app"]),
+        (home / "Applications" / "Spyder.app", ["open", "-a", str(home / "Applications" / "Spyder.app")]),
+    ]
+
+    candidates: list[list[str]] = []
+    for app_path, cmd in app_candidates:
+        if app_path.exists():
+            candidates.append(cmd)
+
+    for name in ("code", "cursor", "codium", "pycharm", "idea", "subl", "spyder"):
+        resolved = shutil.which(name)
+        if resolved:
+            extra = ["-r"] if name in {"code", "cursor", "codium"} else []
+            candidates.append([resolved, *extra])
+
+    deduped: list[list[str]] = []
+    seen: set[tuple[str, ...]] = set()
+    for candidate in candidates:
+        key = tuple(candidate)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(candidate)
+    return deduped
 
 
 def editor_candidates_windows() -> list[list[str]]:
@@ -546,23 +583,104 @@ def editor_candidates() -> list[list[str]]:
 
 
 def prompt_for_editor_path_macos() -> list[str] | None:
-    raise UserFacingError("Not yet")
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+    except Exception:
+        return None
+
+    root = tk.Tk()
+    root.withdraw()
+    root.attributes("-topmost", True)
+
+    # selected = filedialog.askopenfilename(
+    #     title="Choose your code editor application",
+    #     filetypes=[("Applications", "*.app"), ("All files", "*")],
+    # )
+    selected = filedialog.askdirectory(
+        title="Choose your code editor application (.app)"
+    )
+    root.destroy()
+
+    if not selected:
+        return None
+
+    selected_path = Path(selected)
+    if selected_path.suffix.lower() == ".app":
+        return ["open", "-a", str(selected_path)]
+
+    return None
 
 
 def prompt_for_editor_macos(cfg: Config) -> list[str]:
-    raise UserFacingError("Editor picking is not implemented on macOS yet.")
+    log("showing macOS editor picker")
+    candidates = editor_candidates_macos()
+
+    print("\nautomarimo setup")
+    print("=================")
+    print("Choose the editor to use for normal Python files.\n")
+
+    if candidates:
+        print("Detected editors:")
+        for idx, candidate in enumerate(candidates, start=1):
+            print(f"  {idx}. {' '.join(candidate)}")
+        print()
+    else:
+        print("No common editors were detected automatically.\n")
+
+    browse_index = len(candidates) + 1
+    default_index = len(candidates) + 2
+    print(f"  {browse_index}. Browse for an editor application...")
+    print(f"  {default_index}. Use the current macOS default app for normal .py files")
+    print()
+
+    while True:
+        choice = input(f"Enter a number [1-{default_index}]: ").strip()
+        try:
+            selected = int(choice)
+        except ValueError:
+            print("Please enter a number.")
+            continue
+
+        if 1 <= selected <= len(candidates):
+            command = normalize_editor_command(candidates[selected - 1])
+            save_editor_command(cfg, command)
+            return command
+
+        if selected == browse_index:
+            command = prompt_for_editor_path_macos()
+            if command is None:
+                print("No editor selected.")
+                continue
+            command = normalize_editor_command(command)
+            save_editor_command(cfg, command)
+            return command
+
+        if selected == default_index:
+            save_editor_command(cfg, ["__DEFAULT_APP__"])
+            print("Saved: use default app for ordinary Python files.")
+            return ["__DEFAULT_APP__"]
+
+        print("Selection out of range.")
 
 
 def ensure_editor_command_macos(cfg: Config) -> list[str]:
     configured = cfg.editor_command
-    if configured:
-        base = normalize_editor_command(configured)
-        exe = base[0]
+
+    if configured == ["__DEFAULT_APP__"]:
+        return configured
+
+    if configured and not command_looks_like_placeholder(configured):
+        normalized = normalize_editor_command(configured)
+        exe = normalized[0]
         if Path(exe).exists() or shutil.which(exe):
-            return base
-    raise EditorNotFoundError(
-        "Could not find the configured editor executable. macOS editor setup is not implemented yet."
-    )
+            if normalized != configured:
+                save_editor_command(cfg, normalized)
+            return normalized
+        log(f"Configured macOS editor not found: {configured!r}")
+
+    chosen = normalize_editor_command(prompt_for_editor_macos(cfg))
+    return chosen
 
 
 def prompt_for_editor_path_windows() -> list[str] | None:
@@ -730,7 +848,25 @@ def resolve_uv_executable(cfg: Config) -> str | None:
 
 
 def install_uv_macos(install_dir: Path, debug: bool = False) -> None:
-    raise UvInstallError("Not yet")
+    install_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = ["sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"]
+    env = dict(os.environ)
+    env["UV_INSTALL_DIR"] = str(install_dir)
+
+    log(f"Installing uv to {install_dir}")
+    completed = subprocess.run(cmd, env=env)
+
+    if completed.returncode != 0:
+        raise UvInstallError(
+            f"Failed to install uv into {install_dir}.\n"
+            "Please check automarimo.log and confirm curl can reach the official uv installer."
+        )
+
+    if not any(candidate.exists() for candidate in locate_uv_candidates(install_dir)):
+        raise UvInstallError(
+            f"uv installer completed but no uv executable was found in {install_dir}."
+        )
 
 
 def install_uv_windows(install_dir: Path, debug: bool = False) -> None:
