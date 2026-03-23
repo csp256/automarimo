@@ -12,17 +12,19 @@ Finally, you can double click an empty `.py` to get a default marimo notebook.
 1. Move this folder somewhere permanent. Do NOT leave it in Downloads. 
     For example:
     * `C:\Users\<yourname>\automarimo\`
-2. Right-click any `.py` file. (There are some in this directory!)
-3. Choose:
+2. If you are going to rename the folder, do it now.
+3. Right-click any `.py` file. (There are some in this directory!)
+4. Choose:
     * Open with -> Choose another app
-4. Click: 
+5. Click: 
     - More apps -> Look for another app on this PC
-5. Browse to where you put automarimo: 
-    - `C:\Users\<yourname>\automarimo\automarimo.cmd`
-6. Check: 
+6. Browse to where you put automarimo: 
+    - `C:\Users\<yourname>\automarimo\`
+7. Select: 
+    - `automarimo.cmd`
+8. Check: 
     - Always use this app to open `.py` files
-7. Repeat steps 2 through 6 with any `.ipynb` file.
-8. Do not move or rename this directory or its contents. :)
+9. Repeat steps 3 through 8 with any `.ipynb` file. (There is one in this directory!)
 
 ## Installation (macOS)
 
