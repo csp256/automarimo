@@ -24,10 +24,14 @@ def is_macos() -> bool:
     return sys.platform == "darwin"
 
 
+def is_linux() -> bool:
+    return sys.platform.startswith("linux")
+
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 
 def app_support_dir() -> Path:
-    if is_macos():
+    if is_macos() or is_linux():
         return Path.home() / ".config" / APP_NAME
     return SCRIPT_DIR
 
@@ -44,7 +48,7 @@ _LOG_MAX_BYTES = 256 * 1024
 def default_uv_install_dir() -> str:
     if is_windows():
         return ".\\vendor\\uv"
-    if is_macos():
+    if is_macos() or is_linux():
         return str(app_support_dir() / "uv")
     return "./vendor/uv"
 
@@ -552,6 +556,25 @@ def editor_candidates_macos() -> list[list[str]]:
     return deduped
 
 
+def editor_candidates_linux() -> list[list[str]]:
+    candidates: list[list[str]] = []
+
+    for name in ("code", "cursor", "codium", "pycharm", "idea", "subl", "spyder", "gedit"):
+        resolved = shutil.which(name)
+        if resolved:
+            extra = ["-r"] if name in {"code", "cursor", "codium"} else []
+            candidates.append([resolved, *extra])
+
+    deduped: list[list[str]] = []
+    seen: set[tuple[str, ...]] = set()
+    for candidate in candidates:
+        key = tuple(candidate)
+        if key not in seen:
+            seen.add(key)
+            deduped.append(candidate)
+    return deduped
+
+
 def editor_candidates_windows() -> list[list[str]]:
     local = Path(os.environ.get("LOCALAPPDATA", ""))
     program_files = Path(os.environ.get("ProgramFiles", ""))
@@ -661,6 +684,8 @@ def editor_candidates() -> list[list[str]]:
         return editor_candidates_windows()
     if is_macos():
         return editor_candidates_macos()
+    if is_linux():
+        return editor_candidates_linux()
     return []
 
 
@@ -807,6 +832,77 @@ def ensure_editor_command_macos(cfg: Config) -> list[str]:
     return chosen
 
 
+def prompt_for_editor_linux(cfg: Config) -> list[str]:
+    log("showing Linux editor picker")
+    candidates = editor_candidates_linux()
+
+    print("\nautomarimo setup")
+    print("=================")
+    print("Choose the editor to use for normal Python files.\n")
+
+    if candidates:
+        print("Detected editors:")
+        for idx, candidate in enumerate(candidates, start=1):
+            print(f"  {idx}. {' '.join(candidate)}")
+        print()
+    else:
+        print("No common editors were detected automatically.\n")
+
+    browse_index = len(candidates) + 1
+    default_index = len(candidates) + 2
+    print(f"  {browse_index}. Type an editor command manually...")
+    print(f"  {default_index}. Use the current Linux default app for normal .py files")
+    print()
+
+    while True:
+        choice = input(f"Enter a number [1-{default_index}]: ").strip()
+        try:
+            selected = int(choice)
+        except ValueError:
+            print("Please enter a number.")
+            continue
+
+        if 1 <= selected <= len(candidates):
+            command = normalize_editor_command(candidates[selected - 1])
+            save_editor_command(cfg, command)
+            return command
+
+        if selected == browse_index:
+            raw = input("Enter the editor command to use (for example: code -r): ").strip()
+            if not raw:
+                print("No editor command entered.")
+                continue
+            command = normalize_editor_command(shlex.split(raw))
+            save_editor_command(cfg, command)
+            return command
+
+        if selected == default_index:
+            save_editor_command(cfg, ["__DEFAULT_APP__"])
+            print("Saved: use default app for ordinary Python files.")
+            return ["__DEFAULT_APP__"]
+
+        print("Selection out of range.")
+
+
+def ensure_editor_command_linux(cfg: Config) -> list[str]:
+    configured = cfg.editor_command
+
+    if configured == ["__DEFAULT_APP__"]:
+        return configured
+
+    if configured and not command_looks_like_placeholder(configured):
+        normalized = normalize_editor_command(configured)
+        exe = normalized[0]
+        if Path(exe).exists() or shutil.which(exe):
+            if normalized != configured:
+                save_editor_command(cfg, normalized)
+            return normalized
+        log(f"Configured Linux editor not found: {configured!r}")
+
+    chosen = normalize_editor_command(prompt_for_editor_linux(cfg))
+    return chosen
+
+
 def prompt_for_editor_path_windows() -> list[str] | None:
     try:
         import tkinter as tk
@@ -907,6 +1003,8 @@ def ensure_editor_command(cfg: Config) -> list[str] | None:
         return ensure_editor_command_windows(cfg)
     if is_macos():
         return ensure_editor_command_macos(cfg)
+    if is_linux():
+        return ensure_editor_command_linux(cfg)
     if cfg.editor_command:
         base = normalize_editor_command(cfg.editor_command)
         exe = base[0]
@@ -946,6 +1044,11 @@ def launch_with_default_app(path: Path, cfg: Config) -> int:
         subprocess.Popen(["open", str(path)])
         return 0
 
+    if is_linux():
+        maybe_debug(cfg, f"Falling back to Linux default opener for: {path}")
+        subprocess.Popen(["xdg-open", str(path)])
+        return 0
+
     raise UserFacingError("Default app launching is not implemented on this platform yet.")
 
 
@@ -972,6 +1075,28 @@ def resolve_uv_executable(cfg: Config) -> str | None:
 
 
 def install_uv_macos(install_dir: Path, debug: bool = False) -> None:
+    install_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = ["sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"]
+    env = dict(os.environ)
+    env["UV_INSTALL_DIR"] = str(install_dir)
+
+    log(f"Installing uv to {install_dir}")
+    completed = subprocess.run(cmd, env=env)
+
+    if completed.returncode != 0:
+        raise UvInstallError(
+            f"Failed to install uv into {install_dir}.\n"
+            "Please check automarimo.log and confirm curl can reach the official uv installer."
+        )
+
+    if not any(candidate.exists() for candidate in locate_uv_candidates(install_dir)):
+        raise UvInstallError(
+            f"uv installer completed but no uv executable was found in {install_dir}."
+        )
+
+
+def install_uv_linux(install_dir: Path, debug: bool = False) -> None:
     install_dir.mkdir(parents=True, exist_ok=True)
 
     cmd = ["sh", "-c", "curl -LsSf https://astral.sh/uv/install.sh | sh"]
@@ -1024,6 +1149,9 @@ def install_uv_platform(install_dir: Path, debug: bool = False) -> None:
         return
     if is_macos():
         install_uv_macos(install_dir, debug=debug)
+        return
+    if is_linux():
+        install_uv_linux(install_dir, debug=debug)
         return
     raise UvInstallError("Not yet")
 
