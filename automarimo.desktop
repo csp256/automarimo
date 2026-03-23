@@ -1,0 +1,10 @@
+# TODO
+#[Desktop Entry]
+#Type=Application
+#Name=Automarimo
+#Comment=Open Python files with automarimo
+#Exec=/absolute/path/to/your/repo/automarimo.py %f
+#Terminal=true
+#MimeType=text/x-python;application/x-ipynb+json;
+#Categories=Development;
+#NoDisplay=false

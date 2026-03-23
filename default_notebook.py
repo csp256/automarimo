@@ -21,7 +21,7 @@ with app.setup:
 @app.cell(hide_code=True)
 def _():
     mo.md(r"""
-    ## Run the cells in order with: **Shift + enter**
+    ## Run the cells in order with: **Shift + Enter**
     """)
     return
 
@@ -29,20 +29,18 @@ def _():
 @app.cell
 def _():
     theta = np.arange(0, 2*np.pi, 0.01)
-    cos_theta = np.cos(theta)
-    sin_theta = np.sin(theta)
-    return cos_theta, sin_theta, theta
+    return (theta,)
 
 
 @app.cell
-def _(cos_theta, sin_theta, theta):
-    plt.plot(theta, sin_theta, label="sin")
-    plt.plot(theta, cos_theta, label="cos")
+def _(theta):
+    plt.plot(theta, np.sin(theta), label="sin")
+    plt.plot(theta, np.cos(theta), label="cos")
     plt.legend()
     plt.grid(True)
     plt.title('Basic plotting')
     plt.xlabel(r'$\Theta$ [radians]')
-    plt.ylabel('Unitless')
+    plt.ylabel(None)
     return
 
 
