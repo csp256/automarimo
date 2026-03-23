@@ -9,32 +9,27 @@ Finally, you can double click an empty `.py` to get a default marimo notebook.
 
 ## Installation (Windows)
 
-1. Move this folder somewhere stable. Do NOT leave it in Downloads.
-   Good example:
-     `C:\Users\<yourname>\Tools\automarimo\`
-
+1. Move this folder somewhere permanent. Do NOT leave it in Downloads. 
+    For example:
+    * `C:\Users\<yourname>\automarimo\`
 2. Right-click any `.py` file. (There are some in this directory!)
-
 3. Choose:
-     Open with -> Choose another app
-
-4. Click:
-     More apps -> Look for another app on this PC
-
-5. Browse to:
-     `...\automarimo\automarimo.cmd`
-
-6. Check:
-     Always use this app to open `.py` files
-
-7. Do not move or rename this directory.
+    * Open with -> Choose another app
+4. Click: 
+    - More apps -> Look for another app on this PC
+5. Browse to where you put automarimo: 
+    - `C:\Users\<yourname>\automarimo\automarimo.cmd`
+6. Check: 
+    - Always use this app to open `.py` files
+7. Repeat steps 2 through 6 with any `.ipynb` file.
+8. Do not move or rename this directory or its contents. :)
 
 ## Installation (macOS)
 
-1. Download `automarimo.app` somewhere stable, such as your repo root or your `Applications` folder.
+1. Download `automarimo.app` somewhere stable, such as your `Applications` folder.
 2. Double-click `automarimo.app` once to make sure macOS will launch it.
 3. If macOS warns that the app was downloaded from the internet, allow it in **System Settings → Privacy & Security**.
-4. In Finder, select any `.py` file.
+4. In Finder, select any `.py` file. (There are some in this directory!)
 5. Press **Command-I** to open **Get Info**.
 6. Expand **Open with**.
 7. Choose **automarimo.app** from the app list.
